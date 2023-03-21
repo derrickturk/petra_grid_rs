@@ -1,9 +1,12 @@
 [package]
 name = "petra_grid"
-version = "0.1.0"
 edition = "2021"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+version = "1.0.0"
+authors = ["Derrick W. Turk <dwt@terminusdatascience.com>"]
+description = "A library for reading Petra GRD grid files"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/derrickturk/petra_grid_rs"
 
 [dependencies]
 byteorder = "1.4.3"

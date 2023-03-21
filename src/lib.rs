@@ -21,8 +21,19 @@
 
 //! types and functions for retrieving (partial) grid data from Petra GRD files
 //!
-//! this would be a great place to tell the story of how this came into being,
-//! or whatever people do here these days
+//! this library is based on a lot of time spent in a hex editor examining some
+//! Petra grid files, including the utterly ungoogleable [WVGS Utica Playbook
+//! supplemental Petra grid
+//! archive](https://www.wvgs.wvnet.edu/utica/playbook/pb_12.aspx) as well as
+//! data provided by helpful collaborators
+//!
+//! educated guesses have been made in some places based on information in Petra
+//! documentation or ancillary output
+//!
+//! while we've successfully used it to read real Petra grids, it's had limited
+//! testing, and much of the data format remains opaque and mysterious, so
+//! expect oddities and perhaps errors, especially when reading grids which use
+//! "uncommon" methods or features
 
 use byteorder::{LittleEndian, ReadBytesExt};
 
@@ -71,6 +82,18 @@ pub enum GridData {
     ///
     /// each data element is a measurement in the *z* dimension; the *x* and *y*
     /// values are implicit (see the `xmin`, ...) values in [Grid]
+    ///
+    /// Petra stores the data in row-major form, with the values in each row
+    /// proceeding along the *x* dimension from east to west, and the rows
+    /// themselves proceeding along the *y* dimension from south to north
+    /// (that is, the values of *y* increase for each row in order, and the
+    /// "origin" is at the "lower left")
+    ///
+    /// note that many "computer graphics" applications and libraries expect
+    /// the opposite convention for the *y* axis (origin at the upper left);
+    /// you may wish to use e.g. [ndarray::ArrayBase::invert_axis] for these
+    /// applications, or to use application-specific options (like passing
+    /// `origin='lower'` to `matplotlib.pyplot.imshow`)
     Rectangular(Array2<f64>),
 
     /// a triangular (n_triangles × 3 vertices × 3 dimensions) grid
