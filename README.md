@@ -17,7 +17,62 @@ with the developer.
 
 ---
 
-A nice example should go here.
+### Example usage
+
+This library can be used to read `.GRD` grid data from a file, buffer, or
+any other source implementing `std::io::Read` and `std::io::Seek`. Here's a
+short program for dumping "debug" representations of grid files provided on the
+command line:
+```rust
+use std::{
+    env,
+    fs::File,
+    process::ExitCode,
+};
+
+use petra_grid::{Error, Grid};
+
+fn process_grid_file(path: &String) -> Result<(), Error> {
+    let mut f = File::open(path)?;
+    let grid = Grid::read(&mut f)?;
+    println!("{}:\n{:?}", path, grid);
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    let args = env::args().collect::<Vec<_>>();
+    match &args[..] {
+        [] => {
+            eprintln!("Usage: read_grid <grd-files>");
+            return ExitCode::from(2);
+        },
+
+        [prog] => {
+            eprintln!("Usage: {} <grd-files>", prog);
+            return ExitCode::from(2);
+        },
+
+        _ => {},
+    }
+
+    let mut any_error = false;
+    for path in &args[1..] {
+        match process_grid_file(path) {
+            Ok(()) => { },
+            Err(e) => {
+                eprintln!("Error reading {}: {}", path, e);
+                any_error = true;
+            },
+        };
+    }
+
+    if any_error {
+        ExitCode::from(1)
+    } else {
+        ExitCode::from(0)
+    }
+}
+```
 
 #### Available under the [MIT license](LICENSE)
 

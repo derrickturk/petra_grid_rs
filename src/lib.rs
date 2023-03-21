@@ -76,6 +76,11 @@ impl UnitOfMeasure {
 }
 
 /// the actual grid data of a Petra grid
+///
+/// data layout is described for each variant, below
+///
+/// Petra represents missing data in grids as `1e30` exactly; we recode this
+/// to [f64::NAN] in keeping with more modern convention
 #[derive(Clone, Debug)]
 pub enum GridData {
     /// a rectangular (rows × columns) grid
