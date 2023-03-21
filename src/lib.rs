@@ -122,8 +122,7 @@ pub struct Grid {
     /// in gridding
     pub source_data: String,
 
-    /// we don't know what this means; as far as we can tell, it's always
-    /// `"C66"`
+    /// we don't know what this means; as far as we can tell, it's always "C66"
     pub unknown_metadata: String,
 
     /// we think this string describes the map projection (e.g. "TX-27C",
@@ -224,9 +223,9 @@ impl Grid {
         }
 
         let y_rel_err =
-          (ymin + (columns - 1) as f64 * ystep - ymax).abs() / ymax;
+          (ymin + (rows - 1) as f64 * ystep - ymax).abs() / ymax;
         if y_rel_err > NAUGHTY_SPEC_REL_ERROR {
-            return Err(Error::InvalidYSpec(ymin, ymax, ystep, columns));
+            return Err(Error::InvalidYSpec(ymin, ymax, ystep, rows));
         }
 
         let source_len = source.seek(SeekFrom::End(0))?;
@@ -249,6 +248,7 @@ impl Grid {
         let datum = read_petra_string::<_, DATUM_LEN>(source)?;
 
         source.seek(SeekFrom::Start(GRID_OFFSET))?;
+        // TODO: 1e30 fixup
         let data = if n_triangles == 0 {
             let mut buf = vec![0.0; size as usize];
             source.read_f64_into::<LittleEndian>(&mut buf[..])?;
@@ -359,9 +359,9 @@ impl fmt::Display for Error {
             Error::InvalidXSpec(min, max, step, columns) =>
                 write!(f, "invalid x spec: {} to {} by {} but {} columns",
                   min, max, step, columns),
-            Error::InvalidYSpec(min, max, step, columns) =>
-                write!(f, "invalid y spec: {} to {} by {} but {} columns",
-                  min, max, step, columns),
+            Error::InvalidYSpec(min, max, step, rows) =>
+                write!(f, "invalid y spec: {} to {} by {} but {} rows",
+                  min, max, step, rows),
             Error::InvalidRectangularSize(size, actual_size) =>
                 write!(f,
                   "actual data length {} bytes does not match claimed grid size {}",
@@ -391,6 +391,7 @@ impl From<io::Error> for Error {
  * from_utf8_lossy just to be on the safe side of weird/old encodings, and
  * yield a String containing everything up to the first NUL.
  */
+// TODO: fix
 fn petra_string(buf: &[u8]) -> String {
     let len = buf.iter().position(|&c| c == b'0').unwrap_or(buf.len());
     String::from_utf8_lossy(&buf[0..len]).into_owned()
