@@ -391,9 +391,8 @@ impl From<io::Error> for Error {
  * from_utf8_lossy just to be on the safe side of weird/old encodings, and
  * yield a String containing everything up to the first NUL.
  */
-// TODO: fix
 fn petra_string(buf: &[u8]) -> String {
-    let len = buf.iter().position(|&c| c == b'0').unwrap_or(buf.len());
+    let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
     String::from_utf8_lossy(&buf[0..len]).into_owned()
 }
 
