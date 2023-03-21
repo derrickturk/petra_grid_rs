@@ -1,14 +1,27 @@
 //! types and functions for retrieving (partial) grid data from Petra GRD files
+//!
+//! this would be a great place to tell the story of how this came into being,
+//! or whatever people do here these days
 
-use {
-    byteorder::{LittleEndian, ReadBytesExt},
-    chrono::NaiveDate,
-    ndarray::{Array2, Array3,},
-    std::{
-        error,
-        fmt,
-        io::{self, Read, Seek, SeekFrom},
-    },
+use byteorder::{LittleEndian, ReadBytesExt};
+
+use ndarray::{
+    Array,
+    Array2,
+    Array3,
+    ShapeBuilder,
+};
+
+use time::{
+    macros::datetime,
+    Duration,
+    PrimitiveDateTime,
+};
+
+use std::{
+    error,
+    fmt,
+    io::{self, Read, Seek, SeekFrom},
 };
 
 /// units of measure for a given dimension
@@ -103,7 +116,7 @@ pub struct Grid {
     pub zunits: UnitOfMeasure,
 
     /// date of creation (possibily of last modification?) as recorded by Petra
-    pub created_date: NaiveDate,
+    pub created_date: PrimitiveDateTime,
 
     /// we think this is used to describe the source of the data used
     /// in gridding
@@ -135,6 +148,9 @@ pub struct Grid {
     /// this value is logged by Petra as "RLAT": "reference latitude" perhaps?
     /// (observed values look like plausible latitudes)
     pub rlat: f64,
+
+    /// the actual grid data, according to its inferred format
+    pub data: GridData,
 }
 
 const CM_RLAT_OFFSET: u64 = 0xb9;
@@ -162,9 +178,7 @@ impl Grid {
     pub fn read<R: Read + Seek>(source: &mut R) -> Result<Grid, Error> {
         source.rewind()?;
         let version = source.read_u32::<LittleEndian>()?;
-        let mut name = [0u8; NAME_LEN];
-        source.read_exact(&mut name)?;
-        // TODO: convert "FWNT buf" to String
+        let name = read_petra_string::<_, NAME_LEN>(source)?;
         let size = source.read_u32::<LittleEndian>()?;
         let xmin = source.read_f64::<LittleEndian>()?;
         let xmax = source.read_f64::<LittleEndian>()?;
@@ -180,8 +194,7 @@ impl Grid {
         let rlat = source.read_f64::<LittleEndian>()?;
 
         source.seek(SeekFrom::Start(DATE_OFFSET))?;
-        let date = source.read_f64::<LittleEndian>()?;
-        // TODO: convert to actual date
+        let created_date = petra_datetime(source.read_f64::<LittleEndian>()?);
 
         source.seek(SeekFrom::Start(ROWS_COLS_OFFSET))?;
         let rows = source.read_u32::<LittleEndian>()?;
@@ -227,7 +240,60 @@ impl Grid {
             return Err(Error::InvalidTriangleCount(n_triangles, data_size));
         }
 
-        todo!("build the grid")
+        source.seek(SeekFrom::Start(SOURCE_OFFSET))?;
+        let source_data = read_petra_string::<_, SOURCE_LEN>(source)?;
+
+        source.seek(SeekFrom::Start(UNK_PROJ_DATUM_OFFSET))?;
+        let unknown_metadata = read_petra_string::<_, UNK_LEN>(source)?;
+        let projection = read_petra_string::<_, PROJ_LEN>(source)?;
+        let datum = read_petra_string::<_, DATUM_LEN>(source)?;
+
+        source.seek(SeekFrom::Start(GRID_OFFSET))?;
+        let data = if n_triangles == 0 {
+            let mut buf = vec![0.0; size as usize];
+            source.read_f64_into::<LittleEndian>(&mut buf[..])?;
+            /* safety: we checked above that rows x columns == size and that the
+             * data size matched */
+            let arr = Array::from_shape_vec((rows as usize, columns as usize), buf)
+              .unwrap();
+            GridData::Rectangular(arr)
+        } else {
+            let mut buf = vec![0.0; n_triangles as usize * 9];
+            source.read_f64_into::<LittleEndian>(&mut buf[..])?;
+            // safety: we checked above that n_triangles x 72 was the data size
+            let arr = Array::from_shape_vec(
+              (n_triangles as usize, 3, 3).strides((72, 8, 24)), buf).unwrap();
+            GridData::Triangular(arr)
+        };
+
+        Ok(Grid {
+            version,
+            name,
+            size,
+            rows,
+            columns,
+            n_triangles,
+            xmin,
+            xmax,
+            ymin,
+            ymax,
+            xstep,
+            ystep,
+            zmin,
+            zmax,
+            xyunits,
+            zunits,
+            created_date,
+            source_data,
+            unknown_metadata,
+            projection,
+            datum,
+            grid_method,
+            projection_code,
+            cm,
+            rlat,
+            data,
+        })
     }
 }
 
@@ -318,4 +384,29 @@ impl From<io::Error> for Error {
     fn from(other: io::Error) -> Self {
         Self::IOError(other)
     }
+}
+
+/* produce a String from a Petra-grid "fixed width null-terminated" string;
+ * in short, these things are ASCII right-padded with NUL. we use
+ * from_utf8_lossy just to be on the safe side of weird/old encodings, and
+ * yield a String containing everything up to the first NUL.
+ */
+fn petra_string(buf: &[u8]) -> String {
+    let len = buf.iter().position(|&c| c == b'0').unwrap_or(buf.len());
+    String::from_utf8_lossy(&buf[0..len]).into_owned()
+}
+
+// read from a file or buffer, as above, given a fixed width
+fn read_petra_string<R: Read, const WIDTH: usize>(
+  source: &mut R) -> Result<String, io::Error> {
+    let mut buf = [0u8; WIDTH];
+    source.read_exact(&mut buf)?;
+    Ok(petra_string(&buf))
+}
+
+// Petra has a goofy date/time format (from Delphi)
+const DELPHI_DATETIME_ORIGIN: PrimitiveDateTime = datetime!(1899-12-30 00:00);
+
+fn petra_datetime(days_since_origin: f64) -> PrimitiveDateTime {
+    DELPHI_DATETIME_ORIGIN + Duration::seconds_f64(days_since_origin / 86_400.0)
 }
