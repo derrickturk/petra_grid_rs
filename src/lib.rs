@@ -235,7 +235,7 @@ impl Grid {
             return Err(Error::InvalidRectangularSize(size, data_size));
         }
 
-        if n_triangles > 0 && data_size / 72 != size as u64 {
+        if n_triangles > 0 && data_size / 72 != n_triangles as u64 {
             return Err(Error::InvalidTriangleCount(n_triangles, data_size));
         }
 
@@ -248,10 +248,10 @@ impl Grid {
         let datum = read_petra_string::<_, DATUM_LEN>(source)?;
 
         source.seek(SeekFrom::Start(GRID_OFFSET))?;
-        // TODO: 1e30 fixup
         let data = if n_triangles == 0 {
             let mut buf = vec![0.0; size as usize];
             source.read_f64_into::<LittleEndian>(&mut buf[..])?;
+            petra_null_to_nan(&mut buf);
             /* safety: we checked above that rows x columns == size and that the
              * data size matched */
             let arr = Array::from_shape_vec((rows as usize, columns as usize), buf)
@@ -260,9 +260,10 @@ impl Grid {
         } else {
             let mut buf = vec![0.0; n_triangles as usize * 9];
             source.read_f64_into::<LittleEndian>(&mut buf[..])?;
+            petra_null_to_nan(&mut buf);
             // safety: we checked above that n_triangles x 72 was the data size
             let arr = Array::from_shape_vec(
-              (n_triangles as usize, 3, 3).strides((72, 8, 24)), buf).unwrap();
+              (n_triangles as usize, 3, 3).strides((9, 1, 3)), buf).unwrap();
             GridData::Triangular(arr)
         };
 
@@ -409,4 +410,16 @@ const DELPHI_DATETIME_ORIGIN: PrimitiveDateTime = datetime!(1899-12-30 00:00);
 
 fn petra_datetime(days_since_origin: f64) -> PrimitiveDateTime {
     DELPHI_DATETIME_ORIGIN + Duration::seconds_f64(days_since_origin * 86_400.0)
+}
+
+/* Petra uses 1e30, exactly, as a floating-point null/no-data value; we'll
+ * recode this to NaN following modern conventions */
+const PETRA_NULL: f64 = 1e30;
+
+fn petra_null_to_nan(data: &mut [f64]) {
+    for x in data {
+        if *x == PETRA_NULL {
+            *x = f64::NAN;
+        }
+    }
 }
