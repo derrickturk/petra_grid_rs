@@ -408,5 +408,5 @@ fn read_petra_string<R: Read, const WIDTH: usize>(
 const DELPHI_DATETIME_ORIGIN: PrimitiveDateTime = datetime!(1899-12-30 00:00);
 
 fn petra_datetime(days_since_origin: f64) -> PrimitiveDateTime {
-    DELPHI_DATETIME_ORIGIN + Duration::seconds_f64(days_since_origin / 86_400.0)
+    DELPHI_DATETIME_ORIGIN + Duration::seconds_f64(days_since_origin * 86_400.0)
 }
